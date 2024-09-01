@@ -1,0 +1,236 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2761
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 Menlo-Regular;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red157\green0\blue210;\red255\green255\blue255;
+\red0\green0\blue255;\red32\green108\blue135;\red101\green76\blue29;\red0\green0\blue109;\red19\green118\blue70;
+\red15\green112\blue1;\red144\green1\blue18;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;\cssrgb\c68627\c0\c85882;\cssrgb\c100000\c100000\c100000;
+\cssrgb\c0\c0\c100000;\cssrgb\c14902\c49804\c60000;\cssrgb\c47451\c36863\c14902;\cssrgb\c0\c6275\c50196;\cssrgb\c3529\c52549\c34510;
+\cssrgb\c0\c50196\c0;\cssrgb\c63922\c8235\c8235;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs24 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 \
+\pard\pardeftab720\partightenfactor0
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  AlgorithmImports \cf3 \strokec3 import\cf0 \strokec2  *\cb1 \
+\cf3 \cb4 \strokec3 import\cf0 \strokec2  numpy \cf3 \strokec3 as\cf0 \strokec2  np\cb1 \
+\cf3 \cb4 \strokec3 import\cf0 \strokec2  pandas \cf3 \strokec3 as\cf0 \strokec2  pd\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  sklearn.decomposition \cf3 \strokec3 import\cf0 \strokec2  PCA\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  sklearn.model_selection \cf3 \strokec3 import\cf0 \strokec2  TimeSeriesSplit\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  tensorflow.keras.models \cf3 \strokec3 import\cf0 \strokec2  Sequential\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  tensorflow.keras.layers \cf3 \strokec3 import\cf0 \strokec2  LSTM, Dense, Dropout\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  scipy.optimize \cf3 \strokec3 import\cf0 \strokec2  minimize\cb1 \
+\cf3 \cb4 \strokec3 from\cf0 \strokec2  scipy.stats \cf3 \strokec3 import\cf0 \strokec2  norm\cb1 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf5 \cb4 \strokec5 class\cf0 \strokec2  \cf6 \strokec6 AdaptivePortfolioAlgorithm\cf0 \strokec2 (\cf6 \strokec6 QCAlgorithm\cf0 \strokec2 ):\cb1 \
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 Initialize\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .SetStartDate(\cf9 \strokec9 2020\cf0 \strokec2 , \cf9 \strokec9 4\cf0 \strokec2 , \cf9 \strokec9 1\cf0 \strokec2 )\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .SetEndDate(\cf9 \strokec9 2024\cf0 \strokec2 , \cf9 \strokec9 8\cf0 \strokec2 , \cf9 \strokec9 31\cf0 \strokec2 )\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .SetCash(\cf9 \strokec9 1000000000\cf0 \strokec2 )  \cf10 \strokec10 # Adjusted for 1bn AUM\cf0 \cb1 \strokec2 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .symbols = [\cb1 \
+\cb4             \cf11 \strokec11 "SPY"\cf0 \strokec2 , \cf11 \strokec11 "EFA"\cf0 \strokec2 , \cf11 \strokec11 "EEM"\cf0 \strokec2 , \cf11 \strokec11 "VIG"\cf0 \strokec2 , \cf11 \strokec11 "SHY"\cf0 \strokec2 ,\cb1 \
+\cb4             \cf11 \strokec11 "LQD"\cf0 \strokec2 , \cf11 \strokec11 "EMB"\cf0 \strokec2 , \cf11 \strokec11 "MUB"\cf0 \strokec2 , \cf11 \strokec11 "TIP"\cf0 \strokec2 , \cf11 \strokec11 "VNQ"\cf0 \strokec2 , \cf11 \strokec11 "XLE"\cf0 \strokec2 ,\cb1 \
+\cb4             \cf11 \strokec11 "GLD"\cf0 \strokec2 , \cf11 \strokec11 "TLT"\cf0 \strokec2 , \cf11 \strokec11 "UUP"\cf0 \strokec2   \cf10 \strokec10 # Added Gold, Long-Term Treasuries, US Dollar Index\cf0 \cb1 \strokec2 \
+\cb4         ]\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .assets = [\cf5 \strokec5 self\cf0 \strokec2 .AddEquity(symbol, Resolution.Daily).Symbol \cf3 \strokec3 for\cf0 \strokec2  symbol \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .symbols]\cb1 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .lookback = \cf9 \strokec9 24\cf0 \strokec2  * \cf9 \strokec9 21\cf0 \strokec2   \cf10 \strokec10 # 24 months of data (21 trading days per month)\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .rebalance = \cf9 \strokec9 30\cf0 \strokec2  * \cf9 \strokec9 3\cf0 \strokec2   \cf10 \strokec10 # Rebalance quarterly\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .last_rebalance_time = \cf5 \strokec5 self\cf0 \strokec2 .Time\cb1 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .data = \{\}\cb1 \
+\cb4         \cf3 \strokec3 for\cf0 \strokec2  symbol \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .assets:\cb1 \
+\cb4             \cf5 \strokec5 self\cf0 \strokec2 .data[symbol] = RollingWindow[TradeBar](\cf5 \strokec5 self\cf0 \strokec2 .lookback)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .max_drawdown_limit = \cf9 \strokec9 0.15\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .var_limit = \cf9 \strokec9 0.02\cf0 \strokec2   \cf10 \strokec10 # VaR 99% less than 2% of AUM\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .portfolio_value_history = RollingWindow[\cf6 \strokec6 float\cf0 \strokec2 ](\cf5 \strokec5 self\cf0 \strokec2 .lookback)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .market_cap_weights = \cf5 \strokec5 self\cf0 \strokec2 .GetMarketCapWeights()\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .tau = \cf9 \strokec9 0.025\cf0 \strokec2   \cf10 \strokec10 # Tau, uncertainty in the prior\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .base_risk_aversion = \cf9 \strokec9 3.0\cf0 \strokec2   \cf10 \strokec10 # Base risk aversion coefficient\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .risk_aversion = \cf5 \strokec5 self\cf0 \strokec2 .base_risk_aversion  \cf10 \strokec10 # Initialize risk aversion\cf0 \cb1 \strokec2 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 OnData\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 data\cf0 \strokec2 ):\cb1 \
+\cb4         \cf3 \strokec3 for\cf0 \strokec2  symbol \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .assets:\cb1 \
+\cb4             \cf3 \strokec3 if\cf0 \strokec2  data.Bars.ContainsKey(symbol):\cb1 \
+\cb4                 \cf5 \strokec5 self\cf0 \strokec2 .data[symbol].Add(data.Bars[symbol])\cb1 \
+\cb4         \cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .portfolio_value_history.Add(\cf5 \strokec5 self\cf0 \strokec2 .Portfolio.TotalPortfolioValue)\cb1 \
+\cb4         \cf3 \strokec3 if\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .Time - \cf5 \strokec5 self\cf0 \strokec2 .last_rebalance_time >= timedelta(\cf8 \strokec8 days\cf0 \strokec2 =\cf5 \strokec5 self\cf0 \strokec2 .rebalance):\cb1 \
+\cb4             \cf5 \strokec5 self\cf0 \strokec2 .RebalancePortfolio()\cb1 \
+\cb4             \cf5 \strokec5 self\cf0 \strokec2 .last_rebalance_time = \cf5 \strokec5 self\cf0 \strokec2 .Time\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 GetMarketCapWeights\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Mock example for market cap weights (assumed to be equal here)\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  np.ones(\cf7 \strokec7 len\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .assets)) / \cf7 \strokec7 len\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .assets)\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 GetMarketImpliedReturns\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 cov_matrix\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Calculate the implied equilibrium returns (Pi) using CAPM\cf0 \cb1 \strokec2 \
+\cb4         Pi = \cf5 \strokec5 self\cf0 \strokec2 .risk_aversion * np.dot(cov_matrix, \cf5 \strokec5 self\cf0 \strokec2 .market_cap_weights)\cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  Pi\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 GetInvestorViews\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Example of investor views with more diversified and moderate expectations\cf0 \cb1 \strokec2 \
+\cb4         P = np.array([\cb1 \
+\cb4             [\cf9 \strokec9 1\cf0 \strokec2 , -\cf9 \strokec9 1\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 ],  \cf10 \strokec10 # View: SPY outperforms EFA by 7%\cf0 \cb1 \strokec2 \
+\cb4             [\cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 1\cf0 \strokec2 , -\cf9 \strokec9 1\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 ],  \cf10 \strokec10 # View: EEM outperforms VIG by 1%\cf0 \cb1 \strokec2 \
+\cb4             [\cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 1\cf0 \strokec2 , -\cf9 \strokec9 1\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 , \cf9 \strokec9 0\cf0 \strokec2 ]   \cf10 \strokec10 # View: SHY outperforms LQD by 1%\cf0 \cb1 \strokec2 \
+\cb4         ])\cb1 \
+\cb4         Q = np.array([\cf9 \strokec9 0.2\cf0 \strokec2 , \cf9 \strokec9 0.01\cf0 \strokec2 , \cf9 \strokec9 0.01\cf0 \strokec2 ])  \cf10 \strokec10 # Expected returns for the views\cf0 \cb1 \strokec2 \
+\cb4         Omega = np.diag([\cf9 \strokec9 0.0002\cf0 \strokec2 , \cf9 \strokec9 0.0002\cf0 \strokec2 , \cf9 \strokec9 0.0002\cf0 \strokec2 ])  \cf10 \strokec10 # Uncertainty in views, diagonal covariance matrix\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  P, Q, Omega\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 BlackLitterman\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 Pi\cf0 \strokec2 , \cf8 \strokec8 cov_matrix\cf0 \strokec2 , \cf8 \strokec8 P\cf0 \strokec2 , \cf8 \strokec8 Q\cf0 \strokec2 , \cf8 \strokec8 Omega\cf0 \strokec2 ):\cb1 \
+\cb4         n = cov_matrix.shape[\cf9 \strokec9 0\cf0 \strokec2 ]  \cf10 \strokec10 # Number of assets\cf0 \cb1 \strokec2 \
+\cb4         k = P.shape[\cf9 \strokec9 0\cf0 \strokec2 ]           \cf10 \strokec10 # Number of views\cf0 \cb1 \strokec2 \
+\
+\cb4         \cf10 \strokec10 # Adjust P matrix to include all assets with zeros for those not in the view\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 if\cf0 \strokec2  P.shape[\cf9 \strokec9 1\cf0 \strokec2 ] < n:\cb1 \
+\cb4             P_full = np.zeros((k, n))\cb1 \
+\cb4             P_full[:, :P.shape[\cf9 \strokec9 1\cf0 \strokec2 ]] = P\cb1 \
+\cb4         \cf3 \strokec3 else\cf0 \strokec2 :\cb1 \
+\cb4             P_full = P\cb1 \
+\
+\cb4         \cf10 \strokec10 # Ensure proper dimensions of tau_cov_matrix and other matrices\cf0 \cb1 \strokec2 \
+\cb4         tau_cov_matrix = \cf5 \strokec5 self\cf0 \strokec2 .tau * cov_matrix\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Calculate P.T * inv(Omega) * P\cf0 \cb1 \strokec2 \
+\cb4         PT_Omega_inv_P = np.dot(P_full.T, np.dot(np.linalg.inv(Omega), P_full))\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Calculate the adjusted covariance matrix\cf0 \cb1 \strokec2 \
+\cb4         M_inverse = np.linalg.inv(PT_Omega_inv_P + tau_cov_matrix)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Calculate the adjusted returns\cf0 \cb1 \strokec2 \
+\cb4         adjusted_returns = np.dot(M_inverse, np.dot(P_full.T, np.dot(np.linalg.inv(Omega), Q)) + np.dot(tau_cov_matrix, Pi))\cb1 \
+\cb4         \cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  adjusted_returns\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 AdjustRiskAversion\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 volatility\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Adjust risk aversion based on market volatility\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .risk_aversion = \cf5 \strokec5 self\cf0 \strokec2 .base_risk_aversion * (\cf9 \strokec9 1\cf0 \strokec2  + volatility)\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 OptimizePortfolio\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 mu_BL\cf0 \strokec2 , \cf8 \strokec8 cov_matrix\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Mean-variance optimization to determine portfolio weights\cf0 \cb1 \strokec2 \
+\cb4         \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 portfolio_utility\cf0 \strokec2 (\cf8 \strokec8 weights\cf0 \strokec2 , \cf8 \strokec8 mu_BL\cf0 \strokec2 , \cf8 \strokec8 cov_matrix\cf0 \strokec2 ):\cb1 \
+\cb4             \cf3 \strokec3 return\cf0 \strokec2  -(np.dot(weights, mu_BL) - \cf5 \strokec5 self\cf0 \strokec2 .risk_aversion * np.dot(weights.T, np.dot(cov_matrix, weights)) / \cf9 \strokec9 2\cf0 \strokec2 )\cb1 \
+\
+\cb4         num_assets = \cf7 \strokec7 len\cf0 \strokec2 (mu_BL)\cb1 \
+\cb4         constraints = \{\cf11 \strokec11 'type'\cf0 \strokec2 : \cf11 \strokec11 'eq'\cf0 \strokec2 , \cf11 \strokec11 'fun'\cf0 \strokec2 : \cf5 \strokec5 lambda\cf0 \strokec2  \cf8 \strokec8 weights\cf0 \strokec2 : np.sum(weights) - \cf9 \strokec9 1\cf0 \strokec2 \}  \cf10 \strokec10 # Sum of weights equals 1\cf0 \cb1 \strokec2 \
+\cb4         bounds = \cf6 \strokec6 tuple\cf0 \strokec2 ((\cf9 \strokec9 0.05\cf0 \strokec2 , \cf9 \strokec9 0.35\cf0 \strokec2 ) \cf3 \strokec3 for\cf0 \strokec2  _ \cf3 \strokec3 in\cf0 \strokec2  \cf7 \strokec7 range\cf0 \strokec2 (num_assets))  \cf10 \strokec10 # Weight bounds between 5% and 35%\cf0 \cb1 \strokec2 \
+\
+\cb4         initial_guess = np.ones(num_assets) / num_assets\cb1 \
+\cb4         result = minimize(portfolio_utility, initial_guess, \cf8 \strokec8 args\cf0 \strokec2 =(mu_BL, cov_matrix), \cf8 \strokec8 method\cf0 \strokec2 =\cf11 \strokec11 'SLSQP'\cf0 \strokec2 , \cf8 \strokec8 bounds\cf0 \strokec2 =bounds, \cf8 \strokec8 constraints\cf0 \strokec2 =constraints)\cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  result.x\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 PerformPCA\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 X\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Perform Principal Component Analysis (PCA)\cf0 \cb1 \strokec2 \
+\cb4         pca = PCA(\cf8 \strokec8 n_components\cf0 \strokec2 =\cf9 \strokec9 0.95\cf0 \strokec2 )  \cf10 \strokec10 # Retain 95% of the variance\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  pca.fit_transform(X)\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 TrainLSTM\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 X_train\cf0 \strokec2 , \cf8 \strokec8 y_train\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Train LSTM model with additional momentum features\cf0 \cb1 \strokec2 \
+\cb4         model = Sequential()\cb1 \
+\cb4         model.add(LSTM(\cf9 \strokec9 128\cf0 \strokec2 , \cf8 \strokec8 input_shape\cf0 \strokec2 =(X_train.shape[\cf9 \strokec9 1\cf0 \strokec2 ], X_train.shape[\cf9 \strokec9 2\cf0 \strokec2 ]), \cf8 \strokec8 return_sequences\cf0 \strokec2 =\cf5 \strokec5 True\cf0 \strokec2 ))\cb1 \
+\cb4         model.add(Dropout(\cf9 \strokec9 0.2\cf0 \strokec2 ))\cb1 \
+\cb4         model.add(LSTM(\cf9 \strokec9 128\cf0 \strokec2 ))\cb1 \
+\cb4         model.add(Dropout(\cf9 \strokec9 0.2\cf0 \strokec2 ))\cb1 \
+\cb4         model.add(Dense(\cf9 \strokec9 1\cf0 \strokec2 ))\cb1 \
+\cb4         model.compile(\cf8 \strokec8 optimizer\cf0 \strokec2 =\cf11 \strokec11 'adam'\cf0 \strokec2 , \cf8 \strokec8 loss\cf0 \strokec2 =\cf11 \strokec11 'mse'\cf0 \strokec2 )\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Use TimeSeriesSplit for better validation\cf0 \cb1 \strokec2 \
+\cb4         tscv = TimeSeriesSplit(\cf8 \strokec8 n_splits\cf0 \strokec2 =\cf9 \strokec9 5\cf0 \strokec2 )\cb1 \
+\cb4         \cf3 \strokec3 for\cf0 \strokec2  train_idx, val_idx \cf3 \strokec3 in\cf0 \strokec2  tscv.split(X_train):\cb1 \
+\cb4             model.fit(X_train[train_idx], y_train[train_idx], \cb1 \
+\cb4                       \cf8 \strokec8 validation_data\cf0 \strokec2 =(X_train[val_idx], y_train[val_idx]), \cb1 \
+\cb4                       \cf8 \strokec8 epochs\cf0 \strokec2 =\cf9 \strokec9 10\cf0 \strokec2 , \cf8 \strokec8 batch_size\cf0 \strokec2 =\cf9 \strokec9 32\cf0 \strokec2 , \cf8 \strokec8 verbose\cf0 \strokec2 =\cf9 \strokec9 0\cf0 \strokec2 )\cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  model\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 GenerateFeatures\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 data\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Calculate momentum as a percentage change over 20 periods\cf0 \cb1 \strokec2 \
+\cb4         momentum = (data[\cf9 \strokec9 20\cf0 \strokec2 :] / data[:-\cf9 \strokec9 20\cf0 \strokec2 ]) - \cf9 \strokec9 1\cf0 \strokec2   \cf10 \strokec10 # This calculates the 20-period momentum\cf0 \cb1 \strokec2 \
+\cb4         momentum = np.vstack([np.zeros((\cf9 \strokec9 20\cf0 \strokec2 , data.shape[\cf9 \strokec9 1\cf0 \strokec2 ])), momentum])  \cf10 \strokec10 # Prepend zeros for the first 20 periods\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  np.hstack((data, momentum))\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 PredictReturns\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 model\cf0 \strokec2 , \cf8 \strokec8 X_test\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Predict returns using the trained LSTM model\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  model.predict(X_test)\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 RebalancePortfolio\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         prices = np.array([[bar.Close \cf3 \strokec3 for\cf0 \strokec2  bar \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .data[symbol]] \cf3 \strokec3 for\cf0 \strokec2  symbol \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .assets])\cb1 \
+\cb4         returns = prices[:, \cf9 \strokec9 1\cf0 \strokec2 :] / prices[:, :-\cf9 \strokec9 1\cf0 \strokec2 ] - \cf9 \strokec9 1\cf0 \cb1 \strokec2 \
+\cb4         returns = returns.T\cb1 \
+\cb4         \cb1 \
+\cb4         pca_data = \cf5 \strokec5 self\cf0 \strokec2 .PerformPCA(returns)\cb1 \
+\cb4         X_train, y_train = pca_data[:-\cf9 \strokec9 1\cf0 \strokec2 ], returns[\cf9 \strokec9 1\cf0 \strokec2 :, :]  \cf10 \strokec10 # Use proper time-series splitting\cf0 \cb1 \strokec2 \
+\cb4         \cb1 \
+\cb4         features = \cf5 \strokec5 self\cf0 \strokec2 .GenerateFeatures(X_train)\cb1 \
+\cb4         model = \cf5 \strokec5 self\cf0 \strokec2 .TrainLSTM(features.reshape((features.shape[\cf9 \strokec9 0\cf0 \strokec2 ], features.shape[\cf9 \strokec9 1\cf0 \strokec2 ], \cf9 \strokec9 1\cf0 \strokec2 )), y_train)\cb1 \
+\cb4         predictions = \cf5 \strokec5 self\cf0 \strokec2 .PredictReturns(model, features.reshape((features.shape[\cf9 \strokec9 0\cf0 \strokec2 ], features.shape[\cf9 \strokec9 1\cf0 \strokec2 ], \cf9 \strokec9 1\cf0 \strokec2 )))\cb1 \
+\cb4         \cb1 \
+\cb4         cov_matrix = np.cov(returns.T)\cb1 \
+\cb4         predictions = predictions.flatten()[:\cf7 \strokec7 len\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .assets)]  \cf10 \strokec10 # Ensure the number of predictions matches the number of assets\cf0 \cb1 \strokec2 \
+\
+\cb4         \cf10 \strokec10 # Adjust risk aversion based on market volatility\cf0 \cb1 \strokec2 \
+\cb4         market_volatility = np.std(predictions)\cb1 \
+\cb4         \cf5 \strokec5 self\cf0 \strokec2 .AdjustRiskAversion(market_volatility)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Step 1: Calculate the market-implied returns (Pi)\cf0 \cb1 \strokec2 \
+\cb4         Pi = \cf5 \strokec5 self\cf0 \strokec2 .GetMarketImpliedReturns(cov_matrix)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Step 2: Define the investor views (P, Q, Omega)\cf0 \cb1 \strokec2 \
+\cb4         P, Q, Omega = \cf5 \strokec5 self\cf0 \strokec2 .GetInvestorViews()\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Step 3: Calculate the Black-Litterman expected returns (mu_BL)\cf0 \cb1 \strokec2 \
+\cb4         mu_BL = \cf5 \strokec5 self\cf0 \strokec2 .BlackLitterman(Pi, cov_matrix, P, Q, Omega)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Step 4: Optimize the portfolio using the Black-Litterman adjusted returns\cf0 \cb1 \strokec2 \
+\cb4         weights = \cf5 \strokec5 self\cf0 \strokec2 .OptimizePortfolio(mu_BL, cov_matrix)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Apply weights only if constraints are met\cf0 \cb1 \strokec2 \
+\cb4         current_drawdown = \cf5 \strokec5 self\cf0 \strokec2 .CalculateMaxDrawdown()\cb1 \
+\cb4         current_var = \cf5 \strokec5 self\cf0 \strokec2 .CalculateVaR(predictions, cov_matrix)\cb1 \
+\cb4         \cb1 \
+\cb4         \cf3 \strokec3 if\cf0 \strokec2  current_drawdown >= \cf5 \strokec5 self\cf0 \strokec2 .max_drawdown_limit \cf5 \strokec5 or\cf0 \strokec2  current_var >= \cf5 \strokec5 self\cf0 \strokec2 .var_limit:\cb1 \
+\cb4             \cf10 \strokec10 # Shift to risk-free asset (e.g., SHY) if constraints are breached\cf0 \cb1 \strokec2 \
+\cb4             weights = np.zeros(\cf7 \strokec7 len\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .assets))\cb1 \
+\cb4             weights[\cf5 \strokec5 self\cf0 \strokec2 .symbols.index(\cf11 \strokec11 "SHY"\cf0 \strokec2 )] = \cf9 \strokec9 1.0\cf0 \cb1 \strokec2 \
+\cb4         \cb1 \
+\cb4         \cf10 \strokec10 # Apply the optimized weights to the portfolio\cf0 \cb1 \strokec2 \
+\cb4         allocation = \{asset: \cf6 \strokec6 float\cf0 \strokec2 (weight) \cf3 \strokec3 for\cf0 \strokec2  asset, weight \cf3 \strokec3 in\cf0 \strokec2  \cf7 \strokec7 zip\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .assets, weights)\}\cb1 \
+\cb4         \cf3 \strokec3 for\cf0 \strokec2  symbol, weight \cf3 \strokec3 in\cf0 \strokec2  allocation.items():\cb1 \
+\cb4             \cf5 \strokec5 self\cf0 \strokec2 .SetHoldings(symbol, weight)\cb1 \
+\cb4     \cb1 \
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 CalculateMaxDrawdown\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         peak_value = \cf7 \strokec7 max\cf0 \strokec2 (\cf5 \strokec5 self\cf0 \strokec2 .portfolio_value_history)\cb1 \
+\cb4         drawdown = (peak_value - \cf5 \strokec5 self\cf0 \strokec2 .Portfolio.TotalPortfolioValue) / peak_value\cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  drawdown\cb1 \
+\cb4     \cb1 \
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 CalculateVaR\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 , \cf8 \strokec8 predictions\cf0 \strokec2 , \cf8 \strokec8 cov_matrix\cf0 \strokec2 , \cf8 \strokec8 confidence_level\cf0 \strokec2 =\cf9 \strokec9 0.99\cf0 \strokec2 ):\cb1 \
+\cb4         portfolio_mean = np.dot(predictions, predictions.mean())\cb1 \
+\cb4         portfolio_std = np.sqrt(np.dot(predictions.T, np.dot(cov_matrix, predictions)))\cb1 \
+\cb4         var = norm.ppf(confidence_level) * portfolio_std\cb1 \
+\cb4         \cf3 \strokec3 return\cf0 \strokec2  var / \cf5 \strokec5 self\cf0 \strokec2 .Portfolio.TotalPortfolioValue\cb1 \
+\
+\cb4     \cf5 \strokec5 def\cf0 \strokec2  \cf7 \strokec7 ApplyTailRiskHedging\cf0 \strokec2 (\cf8 \strokec8 self\cf0 \strokec2 ):\cb1 \
+\cb4         \cf10 \strokec10 # Implement a dynamic protective put strategy\cf0 \cb1 \strokec2 \
+\cb4         \cf3 \strokec3 for\cf0 \strokec2  symbol \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .assets:\cb1 \
+\cb4             current_price = \cf5 \strokec5 self\cf0 \strokec2 .Securities[symbol].Price\cb1 \
+\cb4             volatility = np.std([bar.Close \cf3 \strokec3 for\cf0 \strokec2  bar \cf3 \strokec3 in\cf0 \strokec2  \cf5 \strokec5 self\cf0 \strokec2 .data[symbol]])\cb1 \
+\cb4             strike_price = current_price * (\cf9 \strokec9 0.9\cf0 \strokec2  + volatility)\cb1 \
+\cb4             expiry = \cf5 \strokec5 self\cf0 \strokec2 .Time + timedelta(\cf8 \strokec8 days\cf0 \strokec2 =\cf9 \strokec9 30\cf0 \strokec2 )\cb1 \
+\cb4             \cb1 \
+\cb4             option = \cf5 \strokec5 self\cf0 \strokec2 .AddOption(symbol)\cb1 \
+\cb4             option.SetFilter(-\cf9 \strokec9 5\cf0 \strokec2 , \cf9 \strokec9 5\cf0 \strokec2 , timedelta(\cf9 \strokec9 25\cf0 \strokec2 , \cf9 \strokec9 35\cf0 \strokec2 ))\cb1 \
+\cb4             \cb1 \
+\cb4             contracts = option.OptionChainProvider.GetOptionContractList(symbol, expiry)\cb1 \
+\cb4             put_contracts = [contract \cf3 \strokec3 for\cf0 \strokec2  contract \cf3 \strokec3 in\cf0 \strokec2  contracts \cf3 \strokec3 if\cf0 \strokec2  contract.Strike < current_price \cf5 \strokec5 and\cf0 \strokec2  contract.Right == OptionRight.Put]\cb1 \
+\cb4             \cf3 \strokec3 if\cf0 \strokec2  put_contracts:\cb1 \
+\cb4                 best_contract = \cf7 \strokec7 min\cf0 \strokec2 (put_contracts, \cf8 \strokec8 key\cf0 \strokec2 =\cf5 \strokec5 lambda\cf0 \strokec2  \cf8 \strokec8 x\cf0 \strokec2 : \cf7 \strokec7 abs\cf0 \strokec2 (x.Strike - strike_price))\cb1 \
+\cb4                 \cf5 \strokec5 self\cf0 \strokec2 .Buy(best_contract.Symbol, \cf9 \strokec9 1\cf0 \strokec2 )  \cf10 \strokec10 # Example: Buy 1 protective put contract\cf0 \cb1 \strokec2 \
+\
+}

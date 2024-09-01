@@ -1,0 +1,231 @@
+from AlgorithmImports import *
+import numpy as np
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.model_selection import TimeSeriesSplit
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from scipy.optimize import minimize
+from scipy.stats import norm
+
+class AdaptivePortfolioAlgorithm(QCAlgorithm):
+    def Initialize(self):
+        self.SetStartDate(2020, 4, 1)  # Set the start date of the backtest
+        self.SetEndDate(2024, 8, 31)   # Set the end date of the backtest
+        self.SetCash(1000000000)  # Set the initial capital to 1 billion AUM
+        
+        # List of asset symbols to include in the portfolio
+        self.symbols = [
+            "SPY", "EFA", "EEM", "VIG", "SHY",
+            "LQD", "EMB", "MUB", "TIP", "VNQ", "XLE",
+            "GLD", "TLT", "UUP"  # Added Gold, Long-Term Treasuries, US Dollar Index
+        ]
+        
+        # Convert symbols to equity objects and store in self.assets
+        self.assets = [self.AddEquity(symbol, Resolution.Daily).Symbol for symbol in self.symbols]
+        
+        # Set the lookback period to 24 months (21 trading days per month)
+        self.lookback = 24 * 21
+        
+        # Set the rebalance frequency to quarterly (every 3 months)
+        self.rebalance = 30 * 3
+        self.last_rebalance_time = self.Time  # Initialize the last rebalance time
+        
+        # Initialize a rolling window to store historical data for each asset
+        self.data = {}
+        for symbol in self.assets:
+            self.data[symbol] = RollingWindow[TradeBar](self.lookback)
+        
+        # Set maximum allowable drawdown (15%) and value at risk (2%)
+        self.max_drawdown_limit = 0.15
+        self.var_limit = 0.02
+        
+        # Rolling window to keep track of portfolio value history
+        self.portfolio_value_history = RollingWindow[float](self.lookback)
+        
+        # Initialize parameters for the Black-Litterman model
+        self.market_cap_weights = self.GetMarketCapWeights()  # Get market capitalization weights
+        self.tau = 0.025  # Tau represents the uncertainty in the prior estimate of returns
+        self.risk_aversion = 3.0  # Initial risk aversion coefficient
+    
+    def OnData(self, data):
+        # Update the rolling window with the latest price data for each asset
+        for symbol in self.assets:
+            if data.Bars.ContainsKey(symbol):
+                self.data[symbol].Add(data.Bars[symbol])
+        
+        # Update portfolio value history
+        self.portfolio_value_history.Add(self.Portfolio.TotalPortfolioValue)
+        
+        # Check if it's time to rebalance the portfolio
+        if self.Time - self.last_rebalance_time >= timedelta(days=self.rebalance):
+            self.RebalancePortfolio()  # Rebalance the portfolio
+            self.last_rebalance_time = self.Time  # Update the last rebalance time
+    
+    def GetMarketCapWeights(self):
+        # Mock example for market cap weights (equal weighting for simplicity)
+        return np.ones(len(self.assets)) / len(self.assets)
+    
+    def GetMarketImpliedReturns(self, cov_matrix):
+        # Calculate the implied equilibrium returns (Pi) using the CAPM formula
+        Pi = self.risk_aversion * np.dot(cov_matrix, self.market_cap_weights)
+        return Pi
+    
+    def GetInvestorViews(self):
+        # Define investor views on expected returns (P matrix) and uncertainties (Q vector)
+        P = np.array([
+            [1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # View: SPY outperforms EFA by 7%
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]   # View: EEM expected to return 2%
+        ])
+        Q = np.array([0.1, 0.02])  # Expected returns for the views
+        Omega = np.diag([0.0001, 0.0001])  # Covariance matrix of the views (uncertainties)
+        return P, Q, Omega
+    
+    def BlackLitterman(self, Pi, cov_matrix, P, Q, Omega):
+        n = cov_matrix.shape[0]  # Number of assets
+        k = P.shape[0]           # Number of investor views
+    
+        # Adjust P matrix to include all assets, adding zeros for assets not included in the view
+        if P.shape[1] < n:
+            P_full = np.zeros((k, n))
+            P_full[:, :P.shape[1]] = P
+        else:
+            P_full = P
+    
+        # Calculate tau * covariance matrix
+        tau_cov_matrix = self.tau * cov_matrix
+        
+        # Calculate P.T * inv(Omega) * P
+        PT_Omega_inv_P = np.dot(P_full.T, np.dot(np.linalg.inv(Omega), P_full))
+        
+        # Calculate the adjusted covariance matrix (M_inverse)
+        M_inverse = np.linalg.inv(PT_Omega_inv_P + tau_cov_matrix)
+        
+        # Calculate the adjusted returns (mu_BL) using the Black-Litterman formula
+        adjusted_returns = np.dot(M_inverse, np.dot(P_full.T, np.dot(np.linalg.inv(Omega), Q)) + np.dot(tau_cov_matrix, Pi))
+        
+        return adjusted_returns
+    
+    def OptimizePortfolio(self, mu_BL, cov_matrix):
+        # Define a utility function for mean-variance optimization
+        def portfolio_utility(weights, mu_BL, cov_matrix):
+            return -(np.dot(weights, mu_BL) - self.risk_aversion * np.dot(weights.T, np.dot(cov_matrix, weights)) / 2)
+    
+        num_assets = len(mu_BL)  # Number of assets
+        constraints = {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}  # Weights must sum to 1
+        bounds = tuple((0.05, 0.35) for _ in range(num_assets))  # Set minimum and maximum bounds for weights
+    
+        # Start with equal weights as the initial guess
+        initial_guess = np.ones(num_assets) / num_assets
+        
+        # Optimize portfolio weights to maximize utility
+        result = minimize(portfolio_utility, initial_guess, args=(mu_BL, cov_matrix), method='SLSQP', bounds=bounds, constraints=constraints)
+        return result.x
+    
+    def PerformPCA(self, X):
+        # Perform Principal Component Analysis to reduce dimensionality, retaining 95% variance
+        pca = PCA(n_components=0.95)
+        return pca.fit_transform(X)
+    
+    def TrainLSTM(self, X_train, y_train):
+        # Define and train an LSTM model for predicting future returns
+        model = Sequential()
+        model.add(LSTM(128, input_shape=(X_train.shape[1], X_train.shape[2]), return_sequences=True))  # First LSTM layer
+        model.add(Dropout(0.2))  # Add dropout for regularization
+        model.add(LSTM(128))  # Second LSTM layer
+        model.add(Dropout(0.2))  # Add another dropout layer
+        model.add(Dense(1))  # Output layer with one neuron
+        model.compile(optimizer='adam', loss='mse')  # Compile model with Adam optimizer and mean squared error loss
+        
+        # Use TimeSeriesSplit for cross-validation during training
+        tscv = TimeSeriesSplit(n_splits=5)
+        for train_idx, val_idx in tscv.split(X_train):
+            model.fit(X_train[train_idx], y_train[train_idx], 
+                      validation_data=(X_train[val_idx], y_train[val_idx]), 
+                      epochs=10, batch_size=32, verbose=0)  # Train model for 10 epochs
+        return model
+    
+    def PredictReturns(self, model, X_test):
+        # Predict returns on the test data using the trained LSTM model
+        return model.predict(X_test)
+    
+    def RebalancePortfolio(self):
+        # Extract closing prices for all assets from the rolling window
+        prices = np.array([[bar.Close for bar in self.data[symbol]] for symbol in self.assets])
+        
+        # Calculate daily returns
+        returns = prices[:, 1:] / prices[:, :-1] - 1
+        returns = returns.T  # Transpose to have time on the rows and assets on the columns
+        
+        # Perform PCA on the returns data to reduce dimensionality
+        pca_data = self.PerformPCA(returns)
+        
+        # Prepare training data for LSTM model
+        X_train, y_train = pca_data[:-1], returns[1:, :]  # Align X and y for supervised learning
+        
+        # Train the LSTM model and generate predictions
+        model = self.TrainLSTM(X_train.reshape((X_train.shape[0], X_train.shape[1], 1)), y_train)
+        predictions = self.PredictReturns(model, X_train.reshape((X_train.shape[0], X_train.shape[1], 1)))
+        
+        # Calculate the covariance matrix of the returns
+        cov_matrix = np.cov(returns.T)
+        
+        # Flatten predictions to match the number of assets
+        predictions = predictions.flatten()[:len(self.assets)]
+        
+        # Step 1: Calculate the market-implied returns (Pi)
+        Pi = self.GetMarketImpliedReturns(cov_matrix)
+        
+        # Step 2: Define the investor views (P, Q, Omega)
+        P, Q, Omega = self.GetInvestorViews()
+        
+        # Step 3: Calculate the Black-Litterman expected returns (mu_BL)
+        mu_BL = self.BlackLitterman(Pi, cov_matrix, P, Q, Omega)
+        
+        # Step 4: Optimize the portfolio using the Black-Litterman adjusted returns
+        weights = self.OptimizePortfolio(mu_BL, cov_matrix)
+        
+        # Apply weights only if constraints on drawdown and VaR are met
+        current_drawdown = self.CalculateMaxDrawdown()
+        current_var = self.CalculateVaR(predictions, cov_matrix)
+        
+        if current_drawdown >= self.max_drawdown_limit or current_var >= self.var_limit:
+            # If constraints are breached, shift allocation to risk-free asset (SHY)
+            weights = np.zeros(len(self.assets))
+            weights[self.symbols.index("SHY")] = 1.0
+        
+        # Apply the optimized weights to the portfolio
+        allocation = {asset: float(weight) for asset, weight in zip(self.assets, weights)}
+        for symbol, weight in allocation.items():
+            self.SetHoldings(symbol, weight)
+    
+    def CalculateMaxDrawdown(self):
+        # Calculate the maximum drawdown from the portfolio value history
+        peak_value = max(self.portfolio_value_history)
+        drawdown = (peak_value - self.Portfolio.TotalPortfolioValue) / peak_value
+        return drawdown
+    
+    def CalculateVaR(self, predictions, cov_matrix, confidence_level=0.99):
+        # Calculate Value at Risk (VaR) using predicted returns and covariance matrix
+        portfolio_mean = np.dot(predictions, predictions.mean())
+        portfolio_std = np.sqrt(np.dot(predictions.T, np.dot(cov_matrix, predictions)))
+        var = norm.ppf(confidence_level) * portfolio_std
+        return var / self.Portfolio.TotalPortfolioValue
+    
+    def ApplyTailRiskHedging(self):
+        # Implement a protective put strategy to hedge against tail risks
+        for symbol in self.assets:
+            current_price = self.Securities[symbol].Price
+            strike_price = current_price * 0.9  # Buy a 10% out-of-the-money (OTM) put option
+            expiry = self.Time + timedelta(days=30)  # Set expiry date for the option
+            
+            option = self.AddOption(symbol)  # Add options for the asset
+            option.SetFilter(-5, 5, timedelta(25, 35))  # Filter for options within a range
+            
+            contracts = option.OptionChainProvider.GetOptionContractList(symbol, expiry)  # Get option contracts
+            put_contracts = [contract for contract in contracts if contract.Strike < current_price and contract.Right == OptionRight.Put]
+            
+            if put_contracts:
+                best_contract = min(put_contracts, key=lambda x: abs(x.Strike - strike_price))
+                self.Buy(best_contract.Symbol, 1)  # Buy the protective put contract
+
